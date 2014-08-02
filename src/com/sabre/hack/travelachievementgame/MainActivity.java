@@ -42,14 +42,18 @@ import com.facebook.widget.FacebookDialog.ShareDialogBuilder;
 import com.facebook.widget.PickerFragment;
 import com.facebook.widget.PlacePickerFragment;
 import com.sabre.hack.travelachievementgame.MyLocation.LocationResult;
+import com.sabre.hack.travelachievementgame.database.Category;
+import com.sabre.hack.travelachievementgame.database.Place;
+import com.sabre.hack.travelachievementgame.database.VisitedDataSource;
 
 public class MainActivity extends FragmentActivity implements
 ActionBar.TabListener {
-	private final boolean bypassLocation = false;
+	private static VisitedDataSource datasource;
+	private final boolean bypassLocation = true;
 	private Location mockLocation = new Location("") {
 		{
-			setLatitude(47.6097);
-			setLongitude(-122.3331);
+			setLatitude(32.984253);
+			setLongitude(-96.745823);
 		}
 	};
 
@@ -109,6 +113,9 @@ ActionBar.TabListener {
 		setContentView(R.layout.activity_main);
 		uiHelper = new UiLifecycleHelper(this, callback);
 		uiHelper.onCreate(savedInstanceState);
+
+	    datasource = new VisitedDataSource(this);
+	    datasource.open();
 
 		if (savedInstanceState != null) {
 			String name = savedInstanceState.getString(PENDING_ACTION_BUNDLE_KEY);
@@ -328,10 +335,32 @@ ActionBar.TabListener {
 					container, false);
 			int section_number = getArguments().getInt(
 					ARG_SECTION_NUMBER);
-			if(section_number != 1)
+			if(section_number == 2)
+			{
 				rootView.findViewById(R.id.checkin).setVisibility(View.GONE);
+				updatePlaces((TextView)rootView.findViewById(R.id.detail));
+				updateCategories((TextView)rootView.findViewById(R.id.detail2));
+				
+				
+			}
+			else if(section_number == 3)
+			{
+				rootView.findViewById(R.id.checkin).setVisibility(View.GONE);
+			}
 			return rootView;
 		}
+	}
+	private static void updateCategories(TextView target){
+		StringBuffer categories = new StringBuffer("Categories:\n");
+		for(Category category : datasource.getAllCategories())
+			categories.append(category.toString()).append("\n");
+		target.setText(categories.toString());
+	}
+	private static void updatePlaces(TextView target){
+		StringBuffer places = new StringBuffer("Places:\n");
+		for(Place place : datasource.getAllPlaces())
+			places.append(place.toString()).append("\n");
+		target.setText(places.toString());
 	}
 
 	private boolean hasPublishPermission() {
@@ -353,7 +382,6 @@ ActionBar.TabListener {
 			break;
 		}
 	}
-
 
     private void showPublishResult(String message, GraphObject result, FacebookRequestError error) {
         String title = null;
@@ -510,6 +538,15 @@ ActionBar.TabListener {
             results = "<No place selected>";
         }
 		((TextView)findViewById(R.id.detail)).setText(results);
+		datasource.incrementPlace(selection.getName(), selection.getId());
+		Log.d("PlacePicker", "increment Place: "+ selection.getName());
+		String categories[] = selection.getCategory().split(",\\s*");
+		for(String category : categories)
+		{
+			Log.d("PlacePicker", "increment category: " + category);
+			datasource.incrementCategory(category);
+		}
+		
 		performPublish(PendingAction.POST_STATUS_UPDATE, canPresentShareDialog);
 	}
 
