@@ -20,9 +20,12 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import com.facebook.AppEventsLogger;
 import com.facebook.FacebookAuthorizationException;
+import com.facebook.FacebookException;
 import com.facebook.FacebookOperationCanceledException;
 import com.facebook.FacebookRequestError;
 import com.facebook.Request;
@@ -30,22 +33,28 @@ import com.facebook.Response;
 import com.facebook.Session;
 import com.facebook.SessionState;
 import com.facebook.UiLifecycleHelper;
+import com.facebook.model.GraphLocation;
 import com.facebook.model.GraphObject;
 import com.facebook.model.GraphPlace;
 import com.facebook.model.GraphUser;
 import com.facebook.widget.FacebookDialog;
 import com.facebook.widget.FacebookDialog.ShareDialogBuilder;
+import com.facebook.widget.PickerFragment;
+import com.facebook.widget.PlacePickerFragment;
+import com.sabre.hack.travelachievementgame.MyLocation.LocationResult;
 
 public class MainActivity extends FragmentActivity implements
 ActionBar.TabListener {
-	public static GraphPlace selectedPlace;
-
-	private static final Location MY_LOCATION = new Location("") {
+	private final boolean bypassLocation = false;
+	private Location mockLocation = new Location("") {
 		{
 			setLatitude(47.6097);
 			setLongitude(-122.3331);
 		}
 	};
+
+	private final String PENDING_ACTION_BUNDLE_KEY = "com.sabre.hack.travelachievementgame:PendingAction";
+
 
 	private static final String PERMISSION = "publish_actions";
 	private PendingAction pendingAction = PendingAction.NONE;
@@ -64,6 +73,18 @@ ActionBar.TabListener {
 		@Override
 		public void call(Session session, SessionState state, Exception exception) {
 			onSessionStateChange(session, state, exception);
+		}
+	};
+
+	private FacebookDialog.Callback dialogCallback = new FacebookDialog.Callback() {
+		@Override
+		public void onError(FacebookDialog.PendingCall pendingCall, Exception error, Bundle data) {
+			Log.d("HelloFacebook", String.format("Error: %s", error.toString()));
+		}
+
+		@Override
+		public void onComplete(FacebookDialog.PendingCall pendingCall, Bundle data) {
+			Log.d("HelloFacebook", "Success!");
 		}
 	};
 
@@ -89,7 +110,11 @@ ActionBar.TabListener {
 		uiHelper = new UiLifecycleHelper(this, callback);
 		uiHelper.onCreate(savedInstanceState);
 
-		pendingAction = PendingAction.NONE;
+		if (savedInstanceState != null) {
+			String name = savedInstanceState.getString(PENDING_ACTION_BUNDLE_KEY);
+			pendingAction = PendingAction.valueOf(name);
+		}
+
 
 		// Set up the action bar.
 		final ActionBar actionBar = getActionBar();
@@ -149,11 +174,71 @@ ActionBar.TabListener {
 			}
 		});
 
+		final FragmentManager fm = getSupportFragmentManager();
+		Fragment fragment = fm.findFragmentById(R.id.fragment_container);
+		if (fragment != null) {
+			// If we're being re-created and have a fragment, we need to a) hide the main UI controls and
+			// b) hook up its listeners again.
+			//	        	findViewById(R.id.checkin).setVisibility(View.GONE);
+			if (fragment instanceof PlacePickerFragment) {
+				setPlacePickerListeners((PlacePickerFragment) fragment);
+			}
+		}
+
+		// Listen for changes in the back stack so we know if a fragment got popped off because the user
+		// clicked the back button.
+		fm.addOnBackStackChangedListener(new FragmentManager.OnBackStackChangedListener() {
+			@Override
+			public void onBackStackChanged() {
+				if (fm.getBackStackEntryCount() == 0) {
+					// We need to re-show our UI.
+					//	                	findViewById(R.id.checkin).setVisibility(View.VISIBLE);
+				}
+			}
+		});
 		// Can we present the share dialog for regular links?
 		canPresentShareDialog = FacebookDialog.canPresentShareDialog(this,
 				FacebookDialog.ShareDialogFeature.SHARE_DIALOG);
 	}
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        uiHelper.onResume();
+
+        // Call the 'activateApp' method to log an app event for use in analytics and advertising reporting.  Do so in
+        // the onResume methods of the primary Activities that an app may be launched into.
+        AppEventsLogger.activateApp(this);
+
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        uiHelper.onSaveInstanceState(outState);
+
+        outState.putString(PENDING_ACTION_BUNDLE_KEY, pendingAction.name());
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        uiHelper.onActivityResult(requestCode, resultCode, data, dialogCallback);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        uiHelper.onPause();
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        uiHelper.onDestroy();
+    }
+
+    
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		// Inflate the menu; this adds items to the action bar if it is present.
@@ -269,36 +354,38 @@ ActionBar.TabListener {
 		}
 	}
 
-	private FacebookDialog.ShareDialogBuilder createShareDialogBuilderForLink() {
-		ShareDialogBuilder result = new FacebookDialog.ShareDialogBuilder(this);
-		return result;
-	}
 
+    private void showPublishResult(String message, GraphObject result, FacebookRequestError error) {
+        String title = null;
+        String alertMessage = null;
+        if (error == null) {
+            title = getString(R.string.success);
+            String id = result.cast(GraphObjectWithId.class).getId();
+            alertMessage = getString(R.string.successfully_posted_post, message, id);
+        } else {
+            title = getString(R.string.error);
+            alertMessage = error.getErrorMessage();
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(alertMessage)
+                .setPositiveButton(R.string.ok, null)
+                .show();
+    }
+
+    private FacebookDialog.ShareDialogBuilder createShareDialogBuilderForLink() {
+    	ShareDialogBuilder result = new FacebookDialog.ShareDialogBuilder(this);
+		if(place!= null)
+		{
+			result.setLink("http://www.facebook.com/"+place.getId());
+			result.setName(place.getName());
+		}
+    	return result;
+    }
 	private interface GraphObjectWithId extends GraphObject {
 		String getId();
 	}
-
-	private void showPublishResult(String message, GraphObject result, FacebookRequestError error) {
-		String title = null;
-		String alertMessage = null;
-		if (error == null) {
-			title = getString(R.string.success);
-			String id = result.cast(GraphObjectWithId.class).getId();
-			alertMessage = getString(R.string.successfully_posted_post, message, id);
-			Log.d("showPublishResult", "success");
-		} else {
-			title = getString(R.string.error);
-			alertMessage = error.getErrorMessage();
-			Log.d("showPublishResult", "error");
-		}
-
-		new AlertDialog.Builder(this)
-		.setTitle(title)
-		.setMessage(alertMessage)
-		.setPositiveButton(R.string.ok, null)
-		.show();
-	}
-
 	private void postStatusUpdate() {
 		Log.i("postStatusUpdate", "called");
 		if (canPresentShareDialog) {
@@ -321,7 +408,29 @@ ActionBar.TabListener {
 			pendingAction = PendingAction.POST_STATUS_UPDATE;
 		}
 	}
+	
+	public void onClickPickPlace(View v) {
+		Log.d("onClickPickPlace", "clicked");
+		final PlacePickerFragment fragment = new PlacePickerFragment();
+		LocationResult locationResult = new LocationResult(){
+			@Override
+			public void gotLocation(Location location){
+				Log.d("onClickPickPlace", "getLocation");
+				if(bypassLocation)
+					fragment.setLocation(mockLocation);
+				else
+					fragment.setLocation(location);
+				fragment.setTitleText("Pick a Location");
 
+				setPlacePickerListeners(fragment);
+
+				showPickerFragment(fragment);
+			}
+		};
+		MyLocation myLocation = new MyLocation();
+		myLocation.getLocation(this, locationResult);
+	}
+    
 	private void performPublish(PendingAction action, boolean allowNoSession) {
 		Session session = Session.getActiveSession();
 		if (session != null) {
@@ -358,26 +467,66 @@ ActionBar.TabListener {
 		}
 	}
 
+	private void showPickerFragment(PickerFragment<?> fragment) {
+		fragment.setOnErrorListener(new PickerFragment.OnErrorListener() {
+			@Override
+			public void onError(PickerFragment<?> pickerFragment, FacebookException error) {
+				String text = getString(R.string.exception, error.getMessage());
+				Log.e("PickerFragment Error", text);
+			}
+		});
 
-	public void onClickPickPlace(View v) {
-        Intent intent = new Intent(this, PickPlaceActivity.class);
-        PickPlaceActivity.populateParameters(intent, MY_LOCATION, null);
+		FragmentManager fm = getSupportFragmentManager();
+		fm.beginTransaction()
+		.replace(R.id.fragment_container, fragment)
+		.addToBackStack(null)
+		.commit();
 
-        startActivityForResult(intent, 1);
+//		       findViewById(R.id.checkin).setVisibility(View.GONE);
+
+		// We want the fragment fully created so we can use it immediately.
+		fm.executePendingTransactions();
+
+		fragment.loadData(false);
 	}
 
-	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-		super.onActivityResult(requestCode, resultCode, data);
-		Session.getActiveSession().onActivityResult(this, requestCode, resultCode, data);
+	private void onPlacePickerDone(PlacePickerFragment fragment) {
+		FragmentManager fm = getSupportFragmentManager();
+		fm.popBackStack();
 
-		if (requestCode == 1) {
-			if(resultCode == RESULT_OK){
-				performPublish(PendingAction.POST_STATUS_UPDATE, canPresentShareDialog);
-				
+		GraphPlace selection = fragment.getSelection();
+
+		place = selection;
+		String results;
+		if (selection != null) {
+            GraphLocation location = selection.getLocation();
+
+            results = String.format("Name: %s\nCategory: %s\nLocation: (%f,%f)\nStreet: %s, %s, %s, %s, %s",
+                    selection.getName(), selection.getCategory(),
+                    location.getLatitude(), location.getLongitude(),
+                    location.getStreet(), location.getCity(), location.getState(), location.getZip(),
+                    location.getCountry());
+        } else {
+            results = "<No place selected>";
+        }
+		((TextView)findViewById(R.id.detail)).setText(results);
+		performPublish(PendingAction.POST_STATUS_UPDATE, canPresentShareDialog);
+	}
+
+	private void setPlacePickerListeners(final PlacePickerFragment fragment) {
+		fragment.setOnDoneButtonClickedListener(new PlacePickerFragment.OnDoneButtonClickedListener() {
+			@Override
+			public void onDoneButtonClicked(PickerFragment<?> pickerFragment) {
+				onPlacePickerDone(fragment);
 			}
-			if (resultCode == RESULT_CANCELED) {
-				//Write your code if there's no result
+		});
+		fragment.setOnSelectionChangedListener(new PlacePickerFragment.OnSelectionChangedListener() {
+			@Override
+			public void onSelectionChanged(PickerFragment<?> pickerFragment) {
+				if (fragment.getSelection() != null) {
+					onPlacePickerDone(fragment);
+				}
 			}
-		}
+		});
 	}
 }
