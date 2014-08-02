@@ -19,6 +19,8 @@ public class VisitedDataSource {
 			MySQLiteHelper.COLUMN_NAME, MySQLiteHelper.COLUMN_COUNT };
 	private String[] placeColumns = { MySQLiteHelper.COLUMN_ID, MySQLiteHelper.COLUMN_FB_ID,
 			MySQLiteHelper.COLUMN_NAME, MySQLiteHelper.COLUMN_COUNT };
+	private String[] achievementColumns = {MySQLiteHelper.COLUMN_ID, MySQLiteHelper.COLUMN_NAME,
+			MySQLiteHelper.COLUMN_FILENAME, MySQLiteHelper.COLUMN_CATEGORY, MySQLiteHelper.COLUMN_TYPE, MySQLiteHelper.COLUMN_COUNT };
 
 	public VisitedDataSource(Context context) {
 		dbHelper = new MySQLiteHelper(context);
@@ -186,5 +188,57 @@ public class VisitedDataSource {
 			result = cursorToPlace(cursor);
 		cursor.close();
 		return result;
+	}
+	
+	public Achievement createAchievement(String name, String filename, String category, int type, int count) {
+		ContentValues values = new ContentValues();
+		values.put(MySQLiteHelper.COLUMN_NAME, name);
+		values.put(MySQLiteHelper.COLUMN_FILENAME, filename);
+		values.put(MySQLiteHelper.COLUMN_CATEGORY, category);
+		values.put(MySQLiteHelper.COLUMN_TYPE, type);
+		values.put(MySQLiteHelper.COLUMN_COUNT, count);
+		long insertId = database.insert(MySQLiteHelper.TABLE_ACHIEVEMENTS, null,
+				values);
+		Cursor cursor = database.query(MySQLiteHelper.TABLE_ACHIEVEMENTS,
+				achievementColumns, MySQLiteHelper.COLUMN_ID + " = " + insertId, null,
+				null, null, null);
+		cursor.moveToFirst();
+		Achievement newAchievement = cursorToAchievement(cursor);
+		cursor.close();
+		return newAchievement;
+	}
+
+	public void deleteAchievement(Achievement achievement) {
+		long id = achievement.getId();
+		Log.d("Database", "Comment deleted with id: " + id);
+		database.delete(MySQLiteHelper.TABLE_ACHIEVEMENTS, MySQLiteHelper.COLUMN_ID
+				+ " = " + id, null);
+	}
+
+	public List<Achievement> getAllAchievements() {
+		List<Achievement> achievements = new ArrayList<Achievement>();
+
+		Cursor cursor = database.query(MySQLiteHelper.TABLE_ACHIEVEMENTS,
+				achievementColumns, null, null, null, null, null);
+
+		cursor.moveToFirst();
+		while (!cursor.isAfterLast()) {
+			Achievement achievement = cursorToAchievement(cursor);
+			achievements.add(achievement);
+			cursor.moveToNext();
+		}
+		// make sure to close the cursor
+		cursor.close();
+		return achievements;
+	}
+
+	private Achievement cursorToAchievement(Cursor cursor) {
+		if(cursor == null)
+			return null;
+		Achievement achievement = new Achievement();
+		achievement.setId(cursor.getLong(cursor.getColumnIndex(MySQLiteHelper.COLUMN_ID)));
+		achievement.setName(cursor.getString(cursor.getColumnIndex(MySQLiteHelper.COLUMN_NAME)));
+		achievement.setCount(cursor.getInt(cursor.getColumnIndex(MySQLiteHelper.COLUMN_COUNT)));
+		return achievement;
 	}
 } 
