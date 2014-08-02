@@ -7,5 +7,14 @@
     <string name="title_section2">Section 2</string>
     <string name="title_section3">Section 3</string>
     <string name="app_id">1456940984565643</string>
+    <string name="cancelled">Cancelled</string>
+    <string name="permission_not_granted">Unable to perform selected action because permissions were not granted.</string>
+    <string name="ok">OK</string>
+    <string name="hello_user">Hello %1$s!</string>
+    <string name="success">Success</string>
+    <string name="successfully_posted_post">Successfully posted \'%1$s\'.\nPost ID: %2$s</string>
+    <string name="error">Error</string>
+    <string name="status_update">Updating status for %1$s at %2$s</string>
+    <string name="exception">Exception: %1$s</string>
 
 </resources>

@@ -1,26 +1,67 @@
 package com.sabre.hack.travelachievementgame;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 import android.app.ActionBar;
+import android.app.AlertDialog;
 import android.app.FragmentTransaction;
+import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.Signature;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
-import android.support.v4.app.NavUtils;
 import android.support.v4.view.ViewPager;
-import android.view.Gravity;
+import android.util.Base64;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import com.facebook.FacebookAuthorizationException;
+import com.facebook.FacebookOperationCanceledException;
+import com.facebook.FacebookRequestError;
+import com.facebook.Request;
+import com.facebook.Response;
+import com.facebook.Session;
+import com.facebook.SessionState;
+import com.facebook.UiLifecycleHelper;
+import com.facebook.model.GraphObject;
+import com.facebook.model.GraphPlace;
+import com.facebook.model.GraphUser;
+import com.facebook.widget.FacebookDialog;
+
 public class MainActivity extends FragmentActivity implements
 		ActionBar.TabListener {
+    private static final String PERMISSION = "publish_actions";
+    private PendingAction pendingAction = PendingAction.NONE;
+    private GraphUser user;
+    private GraphPlace place;
+    private List<GraphUser> tags;
+    private boolean canPresentShareDialog;
+    
+    private enum PendingAction {
+        NONE,
+        POST_STATUS_UPDATE
+    }
+    private UiLifecycleHelper uiHelper;
+
+    private Session.StatusCallback callback = new Session.StatusCallback() {
+        @Override
+        public void call(Session session, SessionState state, Exception exception) {
+            onSessionStateChange(session, state, exception);
+        }
+    };
 
 	/**
 	 * The {@link android.support.v4.view.PagerAdapter} that will provide
@@ -41,6 +82,10 @@ public class MainActivity extends FragmentActivity implements
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+        uiHelper = new UiLifecycleHelper(this, callback);
+        uiHelper.onCreate(savedInstanceState);
+
+		pendingAction = PendingAction.NONE;
 
 		// Set up the action bar.
 		final ActionBar actionBar = getActionBar();
@@ -74,8 +119,36 @@ public class MainActivity extends FragmentActivity implements
 			// this tab is selected.
 			actionBar.addTab(actionBar.newTab()
 					.setText(mSectionsPagerAdapter.getPageTitle(i))
+			
 					.setTabListener(this));
 		}
+		// start Facebook Login
+//	    Session.openActiveSession(this, true, new Session.StatusCallback() {
+//
+//	      // callback when session changes state
+//	      @Override
+//	      public void call(Session session, SessionState state, Exception exception) {
+//	        if (session.isOpened()) {
+//
+//	          // make request to the /me API
+//	          Request.newMeRequest(session, new Request.GraphUserCallback() {
+//
+//	            // callback after Graph API response with user object
+//	            @Override
+//	            public void onCompleted(GraphUser user, Response response) {
+//	              if (user != null) {
+//	                TextView welcome = (TextView) findViewById(R.id.section_label);
+//	                welcome.setText("Hello " + user.getName() + "!");
+//	              }
+//	            }
+//	          }).executeAsync();
+//	        }
+//	      }
+//	    });
+	    
+        // Can we present the share dialog for regular links?
+        canPresentShareDialog = FacebookDialog.canPresentShareDialog(this,
+                FacebookDialog.ShareDialogFeature.SHARE_DIALOG);
 	}
 
 	@Override
@@ -167,10 +240,130 @@ public class MainActivity extends FragmentActivity implements
 					container, false);
 			TextView dummyTextView = (TextView) rootView
 					.findViewById(R.id.section_label);
-			dummyTextView.setText(Integer.toString(getArguments().getInt(
-					ARG_SECTION_NUMBER)));
+			int section_number = getArguments().getInt(
+					ARG_SECTION_NUMBER);
+			dummyTextView.setText(Integer.toString(section_number));
+			if(section_number != 1)
+				rootView.findViewById(R.id.checkin).setVisibility(View.GONE);
 			return rootView;
 		}
 	}
+	
+	@Override
+	  public void onActivityResult(int requestCode, int resultCode, Intent data) {
+	      super.onActivityResult(requestCode, resultCode, data);
+	      Session.getActiveSession().onActivityResult(this, requestCode, resultCode, data);
+	  }
 
+    public void onClickPostStatusUpdate(View v) {
+        performPublish(PendingAction.POST_STATUS_UPDATE, canPresentShareDialog);
+    }
+
+    private boolean hasPublishPermission() {
+        Session session = Session.getActiveSession();
+        return session != null && session.getPermissions().contains("publish_actions");
+    }
+
+    private void handlePendingAction() {
+        PendingAction previouslyPendingAction = pendingAction;
+        // These actions may re-set pendingAction if they are still pending, but we assume they
+        // will succeed.
+        pendingAction = PendingAction.NONE;
+
+        switch (previouslyPendingAction) {
+            case POST_STATUS_UPDATE:
+                postStatusUpdate();
+                break;
+		default:
+			break;
+        }
+    }
+    
+    private FacebookDialog.ShareDialogBuilder createShareDialogBuilderForLink() {
+        return new FacebookDialog.ShareDialogBuilder(this);
+    }
+
+    private interface GraphObjectWithId extends GraphObject {
+        String getId();
+    }
+    
+    private void showPublishResult(String message, GraphObject result, FacebookRequestError error) {
+        String title = null;
+        String alertMessage = null;
+        if (error == null) {
+            title = getString(R.string.success);
+            String id = result.cast(GraphObjectWithId.class).getId();
+            alertMessage = getString(R.string.successfully_posted_post, message, id);
+            Log.d("showPublishResult", "success");
+        } else {
+            title = getString(R.string.error);
+            alertMessage = error.getErrorMessage();
+            Log.d("showPublishResult", "error");
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(alertMessage)
+                .setPositiveButton(R.string.ok, null)
+                .show();
+    }
+
+    private void postStatusUpdate() {
+    	Log.i("postStatusUpdate", "called");
+        if (canPresentShareDialog) {
+        	Log.d("postStatusUpdate", "canPresentShareDialog true");
+            FacebookDialog shareDialog = createShareDialogBuilderForLink().build();
+            uiHelper.trackPendingDialogCall(shareDialog.present());
+        } else if (user != null && hasPublishPermission()) {
+        	Log.d("postStatusUpdate", "canPresentShareDialog false, user not null, haspublishingpermission true");
+            final String message = getString(R.string.status_update, user.getFirstName(), (new Date().toString()));
+            Request request = Request
+                    .newStatusUpdateRequest(Session.getActiveSession(), message, place, tags, new Request.Callback() {
+                        @Override
+                        public void onCompleted(Response response) {
+                            showPublishResult(message, response.getGraphObject(), response.getError());
+                        	Log.d("postStatusUpdate", "complete");
+                        }
+                    });
+            request.executeAsync();
+        } else {
+            pendingAction = PendingAction.POST_STATUS_UPDATE;
+        }
+    }
+    
+    private void performPublish(PendingAction action, boolean allowNoSession) {
+        Session session = Session.getActiveSession();
+        if (session != null) {
+            pendingAction = action;
+            if (hasPublishPermission()) {
+                // We can do the action right away.
+                handlePendingAction();
+                return;
+            } else if (session.isOpened()) {
+                // We need to get new permissions, then complete the action when we get called back.
+                session.requestNewPublishPermissions(new Session.NewPermissionsRequest(this, PERMISSION));
+                return;
+            }
+        }
+
+        if (allowNoSession) {
+            pendingAction = action;
+            handlePendingAction();
+        }
+    }
+
+    private void onSessionStateChange(Session session, SessionState state, Exception exception) {
+        if (pendingAction != PendingAction.NONE &&
+                (exception instanceof FacebookOperationCanceledException ||
+                exception instanceof FacebookAuthorizationException)) {
+                new AlertDialog.Builder(MainActivity.this)
+                    .setTitle(R.string.cancelled)
+                    .setMessage(R.string.permission_not_granted)
+                    .setPositiveButton(R.string.ok, null)
+                    .show();
+            pendingAction = PendingAction.NONE;
+        } else if (state == SessionState.OPENED_TOKEN_UPDATED) {
+            handlePendingAction();
+        }
+    }
 }
