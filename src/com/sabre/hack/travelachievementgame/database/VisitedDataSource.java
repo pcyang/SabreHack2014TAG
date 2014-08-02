@@ -19,7 +19,7 @@ public class VisitedDataSource {
 			MySQLiteHelper.COLUMN_NAME, MySQLiteHelper.COLUMN_COUNT };
 	private String[] placeColumns = { MySQLiteHelper.COLUMN_ID, MySQLiteHelper.COLUMN_FB_ID,
 			MySQLiteHelper.COLUMN_NAME, MySQLiteHelper.COLUMN_COUNT };
-	private String[] achievementColumns = {MySQLiteHelper.COLUMN_ID, MySQLiteHelper.COLUMN_NAME,
+	private String[] achievementColumns = {MySQLiteHelper.COLUMN_ID, MySQLiteHelper.COLUMN_NAME, MySQLiteHelper.COLUMN_RECEIVED,
 			MySQLiteHelper.COLUMN_FILENAME, MySQLiteHelper.COLUMN_CATEGORY, MySQLiteHelper.COLUMN_TYPE, MySQLiteHelper.COLUMN_COUNT };
 
 	public VisitedDataSource(Context context) {
@@ -36,7 +36,7 @@ public class VisitedDataSource {
 
 	public Category createCategory(String category, int count) {
 		ContentValues values = new ContentValues();
-		values.put(MySQLiteHelper.COLUMN_NAME, category);
+		values.put(MySQLiteHelper.COLUMN_NAME, category.toUpperCase());
 		values.put(MySQLiteHelper.COLUMN_COUNT, count);
 		long insertId = database.insert(MySQLiteHelper.TABLE_CATEGORIES, null,
 				values);
@@ -78,13 +78,14 @@ public class VisitedDataSource {
 			return null;
 		Category category = new Category();
 		category.setId(cursor.getLong(cursor.getColumnIndex(MySQLiteHelper.COLUMN_ID)));
-		category.setName(cursor.getString(cursor.getColumnIndex(MySQLiteHelper.COLUMN_NAME)));
+		category.setName(cursor.getString(cursor.getColumnIndex(MySQLiteHelper.COLUMN_NAME)).toUpperCase());
 		category.setCount(cursor.getInt(cursor.getColumnIndex(MySQLiteHelper.COLUMN_COUNT)));
 		return category;
 	}
 	
 	public void incrementCategory(String name)
 	{
+		name = name.toUpperCase();
 		Category category = findCategory(name);
 		if(category == null)
 		{
@@ -101,6 +102,7 @@ public class VisitedDataSource {
 	
 	public Category findCategory(String name)
 	{
+		name = name.toUpperCase();
 		Category result = null;
 		Cursor cursor = database.query(MySQLiteHelper.TABLE_CATEGORIES,
 				categoryColumns, MySQLiteHelper.COLUMN_NAME + "='" + name + "'", null,
@@ -194,7 +196,7 @@ public class VisitedDataSource {
 		ContentValues values = new ContentValues();
 		values.put(MySQLiteHelper.COLUMN_NAME, name);
 		values.put(MySQLiteHelper.COLUMN_FILENAME, filename);
-		values.put(MySQLiteHelper.COLUMN_CATEGORY, category);
+		values.put(MySQLiteHelper.COLUMN_CATEGORY, category.toUpperCase());
 		values.put(MySQLiteHelper.COLUMN_TYPE, type);
 		values.put(MySQLiteHelper.COLUMN_COUNT, count);
 		long insertId = database.insert(MySQLiteHelper.TABLE_ACHIEVEMENTS, null,
@@ -231,6 +233,62 @@ public class VisitedDataSource {
 		cursor.close();
 		return achievements;
 	}
+	public List<Achievement> getAllUnlockedAchievements() {
+		List<Achievement> achievements = new ArrayList<Achievement>();
+
+		Cursor cursor = database.query(MySQLiteHelper.TABLE_ACHIEVEMENTS,
+				achievementColumns, MySQLiteHelper.COLUMN_RECEIVED + " = " + 1, null, null, null, null);
+
+		cursor.moveToFirst();
+		while (!cursor.isAfterLast()) {
+			Achievement achievement = cursorToAchievement(cursor);
+			achievements.add(achievement);
+			cursor.moveToNext();
+		}
+		// make sure to close the cursor
+		cursor.close();
+		return achievements;
+	}
+	public List<Achievement> getAllLockedAchievements() {
+		List<Achievement> achievements = new ArrayList<Achievement>();
+
+		Cursor cursor = database.query(MySQLiteHelper.TABLE_ACHIEVEMENTS,
+				achievementColumns, MySQLiteHelper.COLUMN_RECEIVED + " = " + 0, null, null, null, null);
+
+		cursor.moveToFirst();
+		while (!cursor.isAfterLast()) {
+			Achievement achievement = cursorToAchievement(cursor);
+			achievements.add(achievement);
+			cursor.moveToNext();
+		}
+		// make sure to close the cursor
+		cursor.close();
+		return achievements;
+	}
+	
+	public void updateAchievements(){
+		List<Achievement> locked = getAllLockedAchievements();
+		for(Achievement achievement : locked)
+		{
+			if(achievement.getType() == 1)
+			{
+				//TODO later
+			}
+			else
+			{
+				Category cat = findCategory(achievement.getCategory());
+				if( cat!=null && cat.getCount() >= achievement.getCount())
+					unlockAchievement(achievement);
+			}
+		}
+	}
+
+	private void unlockAchievement(Achievement achievement) {
+		ContentValues args = new ContentValues();
+		args.put(MySQLiteHelper.COLUMN_RECEIVED, 1);
+		database.update(MySQLiteHelper.TABLE_ACHIEVEMENTS, args , MySQLiteHelper.COLUMN_ID
+			+ " = '" + achievement.getId() +"'", null);
+	}
 
 	private Achievement cursorToAchievement(Cursor cursor) {
 		if(cursor == null)
@@ -238,7 +296,11 @@ public class VisitedDataSource {
 		Achievement achievement = new Achievement();
 		achievement.setId(cursor.getLong(cursor.getColumnIndex(MySQLiteHelper.COLUMN_ID)));
 		achievement.setName(cursor.getString(cursor.getColumnIndex(MySQLiteHelper.COLUMN_NAME)));
+		achievement.setFilename(cursor.getString(cursor.getColumnIndex(MySQLiteHelper.COLUMN_FILENAME)));
+		achievement.setReceived(cursor.getInt(cursor.getColumnIndex(MySQLiteHelper.COLUMN_RECEIVED)));
+		achievement.setCategory(cursor.getString(cursor.getColumnIndex(MySQLiteHelper.COLUMN_CATEGORY)).toUpperCase());
 		achievement.setCount(cursor.getInt(cursor.getColumnIndex(MySQLiteHelper.COLUMN_COUNT)));
 		return achievement;
 	}
+	
 } 

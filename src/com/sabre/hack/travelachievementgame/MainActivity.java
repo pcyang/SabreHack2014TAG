@@ -20,6 +20,9 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TableLayout;
+import android.widget.TableRow;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -42,21 +45,25 @@ import com.facebook.widget.FacebookDialog.ShareDialogBuilder;
 import com.facebook.widget.PickerFragment;
 import com.facebook.widget.PlacePickerFragment;
 import com.sabre.hack.travelachievementgame.MyLocation.LocationResult;
-import com.sabre.hack.travelachievementgame.database.Category;
-import com.sabre.hack.travelachievementgame.database.Place;
+import com.sabre.hack.travelachievementgame.database.Achievement;
 import com.sabre.hack.travelachievementgame.database.VisitedDataSource;
-
 public class MainActivity extends FragmentActivity implements
 ActionBar.TabListener {
 	private static VisitedDataSource datasource;
 	private final boolean bypassLocation = true;
 	private Location mockLocation = new Location("") {
 		{
-			setLatitude(32.984253);
-			setLongitude(-96.745823);
+			setLatitude(32.731414);
+			setLongitude(-117.141329);
 		}
 	};
-
+//	
+//	public void shuffle(View v){
+//		mockLocation = new Location(""){{
+//			setLatitude(32.731414);
+//			setLongitude(-117.141329);
+//		}
+//	}
 	private final String PENDING_ACTION_BUNDLE_KEY = "com.sabre.hack.travelachievementgame:PendingAction";
 
 
@@ -147,6 +154,7 @@ ActionBar.TabListener {
 			}
 		});
 
+		String[] pageTitles = {"Check in","Unlocked","Locked"};
 		// For each of the sections in the app, add a tab to the action bar.
 		for (int i = 0; i < mSectionsPagerAdapter.getCount(); i++) {
 			// Create a tab with text corresponding to the page title defined by
@@ -154,7 +162,7 @@ ActionBar.TabListener {
 			// the TabListener interface, as the callback (listener) for when
 			// this tab is selected.
 			actionBar.addTab(actionBar.newTab()
-					.setText(mSectionsPagerAdapter.getPageTitle(i))
+					.setText(pageTitles[i])
 
 					.setTabListener(this));
 		}
@@ -331,38 +339,67 @@ ActionBar.TabListener {
 		@Override
 		public View onCreateView(LayoutInflater inflater, ViewGroup container,
 				Bundle savedInstanceState) {
-			View rootView = inflater.inflate(R.layout.fragment_main_dummy,
-					container, false);
+			refresh();
 			int section_number = getArguments().getInt(
 					ARG_SECTION_NUMBER);
-			if(section_number == 2)
+			if(section_number == 1)
 			{
-				rootView.findViewById(R.id.checkin).setVisibility(View.GONE);
-				updatePlaces((TextView)rootView.findViewById(R.id.detail));
-				updateCategories((TextView)rootView.findViewById(R.id.detail2));
+				View rootView = inflater.inflate(R.layout.fragment_main_dummy,
+						container, false);
+				TextView detail = (TextView) rootView.findViewById(R.id.detail);
+				StringBuffer result = new StringBuffer();
 				
+				for(Achievement achieve : datasource.getAllAchievements())
+				{
+					result.append(achieve.toString()).append("Unlocked: ").append(achieve.getReceived()).append("\n");
+				}
+				detail.setText(result.toString());
+				return rootView;
+			}
+			else if(section_number == 2)
+			{
 				
+				View rootView = inflater.inflate(R.layout.fragment_main3,
+						container, false);
+				return reloadFragment(rootView, datasource.getAllUnlockedAchievements(), false);
 			}
 			else if(section_number == 3)
 			{
-				rootView.findViewById(R.id.checkin).setVisibility(View.GONE);
+				View rootView = inflater.inflate(R.layout.fragment_main3,
+						container, false);
+				
+				return reloadFragment(rootView, datasource.getAllLockedAchievements(),true);
+				
+			}
+			return null;
+		}
+		
+		public void refresh(){
+			datasource.updateAchievements();
+			
+		  }
+		private View reloadFragment(View rootView, List<Achievement> list, boolean locked){
+			TableLayout	contactTable = (TableLayout) rootView.findViewById(R.id.contactTable3);
+			int bottom = contactTable.getChildCount();
+			
+			for(Achievement achieve : list)
+			{
+
+			    // Inflate your row "template" and fill out the fields.
+			    TableRow row = (TableRow)LayoutInflater.from(getActivity()).inflate(R.layout.attrib_row, null);
+				ImageView imageView = ((ImageView) row.findViewById(R.id.contact_photo));
+				int resId;
+				if(locked)
+					resId = getResources().getIdentifier("locked" , "drawable", rootView.getContext().getPackageName());
+				else
+					resId =  getResources().getIdentifier(achieve.getFilename() , "drawable", rootView.getContext().getPackageName());
+				imageView.setImageResource(resId);
+			    contactTable.addView(row,bottom++);
 			}
 			return rootView;
 		}
 	}
-	private static void updateCategories(TextView target){
-		StringBuffer categories = new StringBuffer("Categories:\n");
-		for(Category category : datasource.getAllCategories())
-			categories.append(category.toString()).append("\n");
-		target.setText(categories.toString());
-	}
-	private static void updatePlaces(TextView target){
-		StringBuffer places = new StringBuffer("Places:\n");
-		for(Place place : datasource.getAllPlaces())
-			places.append(place.toString()).append("\n");
-		target.setText(places.toString());
-	}
-
+	
 	private boolean hasPublishPermission() {
 		Session session = Session.getActiveSession();
 		return session != null && session.getPermissions().contains("publish_actions");
@@ -546,6 +583,7 @@ ActionBar.TabListener {
 			Log.d("PlacePicker", "increment category: " + category);
 			datasource.incrementCategory(category);
 		}
+		//TODO increment special category from API
 		
 		performPublish(PendingAction.POST_STATUS_UPDATE, canPresentShareDialog);
 	}

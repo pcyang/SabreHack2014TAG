@@ -15,24 +15,17 @@
         android:layout_height="wrap_content"
         android:onClick="onClickPickPlace"
         android:text="Check in!" />
-
-    <TextView
+    
+    
+    <TextView 
         android:id="@+id/detail"
-    android:layout_below="@+id/checkin"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="" />
-    <TextView
-        android:id="@+id/detail2"
-    android:layout_below="@+id/detail"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="" />
-"
-
+        android:layout_below="@id/checkin"
+        android:text=""
+        />
     <FrameLayout
-        android:id="@+id/fragment_container"
-        android:layout_width="fill_parent"
-        android:layout_height="fill_parent" />
-
+            android:id="@+id/fragment_container"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"/>
 </RelativeLayout>

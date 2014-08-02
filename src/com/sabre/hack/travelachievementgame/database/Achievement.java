@@ -7,6 +7,7 @@ public class Achievement {
 	private String category;
 	private int type;
 	private int count;
+	private int received;
 
 	public long getId() {
 		return id;
@@ -49,6 +50,12 @@ public class Achievement {
 	public String toString(){
 		StringBuilder result = new StringBuilder("name: ");
 		return result.append(name).append(" count: ").append(count).toString();
+	}
+	public int getReceived() {
+		return received;
+	}
+	public void setReceived(int received) {
+		this.received = received;
 	}
 
 
