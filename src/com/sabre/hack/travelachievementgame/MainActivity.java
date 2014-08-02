@@ -1,8 +1,11 @@
 package com.sabre.hack.travelachievementgame;
 
+import java.text.DecimalFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+
+import org.json.JSONException;
 
 import android.app.ActionBar;
 import android.app.AlertDialog;
@@ -50,20 +53,14 @@ import com.sabre.hack.travelachievementgame.database.VisitedDataSource;
 public class MainActivity extends FragmentActivity implements
 ActionBar.TabListener {
 	private static VisitedDataSource datasource;
-	private final boolean bypassLocation = true;
+	private final boolean bypassLocation = false;
 	private Location mockLocation = new Location("") {
 		{
 			setLatitude(32.731414);
 			setLongitude(-117.141329);
 		}
 	};
-//	
-//	public void shuffle(View v){
-//		mockLocation = new Location(""){{
-//			setLatitude(32.731414);
-//			setLongitude(-117.141329);
-//		}
-//	}
+	
 	private final String PENDING_ACTION_BUNDLE_KEY = "com.sabre.hack.travelachievementgame:PendingAction";
 
 
@@ -353,7 +350,7 @@ ActionBar.TabListener {
 				{
 					result.append(achieve.toString()).append("Unlocked: ").append(achieve.getReceived()).append("\n");
 				}
-				detail.setText(result.toString());
+//				detail.setText(result.toString());
 				return rootView;
 			}
 			else if(section_number == 2)
